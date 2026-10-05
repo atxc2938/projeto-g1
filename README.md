@@ -6,9 +6,9 @@ Projeto da **Avaliação G1** da disciplina **Linguagem de Programação: Análi
 
 | Entrega | Link |
 |---|---|
-| Repositório GitHub | https://github.com/{{GITHUB_USER}}/projeto-g1 |
-| Página do projeto (GitHub Pages) | https://{{GITHUB_USER}}.github.io/projeto-g1/ |
-| Dashboard (Streamlit Community Cloud) | {{STREAMLIT_URL}} |
+| Repositório GitHub | https://github.com/atxc2938/projeto-g1 |
+| Página do projeto (GitHub Pages) | https://atxc2938.github.io/projeto-g1/ |
+| Dashboard (Streamlit Community Cloud) | https://projeto-g1-desemprego.streamlit.app |
 | Notebook de análise | [`notebooks/analise_desemprego.ipynb`](notebooks/analise_desemprego.ipynb) |
 | Código do dashboard | [`app.py`](app.py), [`utils.py`](utils.py), [`pages/`](pages) |
 | Base de dados | [`dados/simulacao_desemprego_brasil.csv`](dados/simulacao_desemprego_brasil.csv) |
@@ -179,7 +179,7 @@ e correlação estatística (Pandas/NumPy).
 ## 9. Como executar localmente
 
 ```bash
-git clone https://github.com/{{GITHUB_USER}}/projeto-g1.git
+git clone https://github.com/atxc2938/projeto-g1.git
 cd projeto-g1
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
