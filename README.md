@@ -126,7 +126,7 @@ regiao (1) ──< (N) uf (1) ──< (N) indicador_trimestral (N) >── (1) s
 | Taxa média de desemprego | 9,90% | Média geral das taxas |
 | Estado com maior desemprego | Ceará (13,65%) | Ranking estadual |
 | Região mais afetada | Nordeste (13,28%) | Comparação regional |
-| Total de desempregados | 5,37 milhões | Soma do último trimestre (2024-T4) |
+| Total de desempregados | 253,84 milhões | Soma total dos registros (5,37 milhões no último trimestre, 2024-T4) |
 | Renda média nacional | R$ 2.790,65 | Média salarial |
 | Evolução da taxa | 10,36% para 8,48% (-1,88 p.p.) | Tendência temporal (2015-T1 a 2024-T4) |
 

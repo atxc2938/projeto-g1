@@ -99,6 +99,11 @@ def fmt_milhoes(valor):
     return f"{fmt_num(valor / 1e6, 2)} mi"
 
 
+def anotacoes(tab, casas=2):
+    """Valores dos heatmaps no formato brasileiro (vírgula decimal)."""
+    return tab.map(lambda v: "" if pd.isna(v) else fmt_num(v, casas)).values
+
+
 def eixo_pct(ax, eixo="y"):
     formatador = mtick.FuncFormatter(lambda v, _: fmt_pct(v, 1))
     (ax.yaxis if eixo == "y" else ax.xaxis).set_major_formatter(formatador)
@@ -306,14 +311,16 @@ def mostrar_kpis(df):
     )
     c3.metric(
         "Região mais afetada", k["regiao_maior"], f"{fmt_pct(k['regiao_maior_taxa'])} de média",
-        delta_color="off",
+        delta_color="off", delta_arrow="off",
     )
     c4, c5, c6 = st.columns(3)
     c4.metric(
-        f"Desempregados ({k['ultimo_periodo']})", fmt_milhoes(k["desempregados_ultimo"]),
+        "Total de desempregados", fmt_milhoes(k["desempregados_total"]),
+        f"{fmt_milhoes(k['desempregados_ultimo'])} em {k['ultimo_periodo']}", delta_color="off",
+        delta_arrow="off",
         help=(
-            "Soma do último trimestre filtrado. Somar todos os trimestres conta a "
-            f"mesma pessoa várias vezes: {fmt_milhoes(k['desempregados_total'])} no período."
+            "Soma de desempregados de todos os registros filtrados (estado x trimestre). Como a mesma "
+            "pessoa pode aparecer em vários trimestres, o número abaixo mostra o retrato do último trimestre."
         ),
     )
     c5.metric("Renda média nacional", fmt_moeda(k["renda_media"], markdown=False))
@@ -471,7 +478,7 @@ def grafico_heatmap_trimestral(df):
     tab.columns = [f"T{c}" for c in tab.columns]
     fig, ax = plt.subplots(figsize=(7, max(3, 0.42 * len(tab) + 1)))
     sns.heatmap(
-        tab, annot=True, fmt=".2f", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
+        tab, annot=anotacoes(tab, 2), fmt="", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
         cbar_kws={"label": "Taxa média de desemprego (%)"}, ax=ax,
     )
     ax.set_title("Heatmap trimestral da taxa de desemprego")
@@ -484,7 +491,7 @@ def grafico_heatmap_trimestral(df):
 def grafico_heatmap_regiao_ano(df):
     tab = df.pivot_table(index="regiao", columns="ano", values="taxa_desemprego", aggfunc="mean", observed=True)
     fig, ax = plt.subplots(figsize=(10, 3.4))
-    sns.heatmap(tab, annot=True, fmt=".1f", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
+    sns.heatmap(tab, annot=anotacoes(tab, 1), fmt="", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
                 cbar_kws={"label": "%"}, ax=ax)
     ax.set_title("Taxa média de desemprego por região e ano")
     ax.set_xlabel("Ano")
@@ -506,7 +513,7 @@ def grafico_correlacao(df):
     corr = df[list(COLUNAS_CORRELACAO)].rename(columns=COLUNAS_CORRELACAO).corr()
     mascara = np.triu(np.ones_like(corr, dtype=bool), k=1)
     fig, ax = plt.subplots(figsize=(6.5, 5))
-    sns.heatmap(corr, mask=mascara, annot=True, fmt=".2f", cmap=CMAP_DIVERGENTE, vmin=-1, vmax=1,
+    sns.heatmap(corr, mask=mascara, annot=anotacoes(corr, 2), fmt="", cmap=CMAP_DIVERGENTE, vmin=-1, vmax=1,
                 linewidths=2, linecolor="white", cbar_kws={"label": "Correlação de Pearson"}, ax=ax)
     ax.set_title("Matriz de correlação")
     fig.tight_layout()
@@ -518,7 +525,7 @@ def grafico_sazonalidade_setor(df):
                          values="taxa_desemprego", aggfunc="mean")
     tab.columns = [f"T{c}" for c in tab.columns]
     fig, ax = plt.subplots(figsize=(7, 3.6))
-    sns.heatmap(tab, annot=True, fmt=".2f", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
+    sns.heatmap(tab, annot=anotacoes(tab, 2), fmt="", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
                 cbar_kws={"label": "%"}, ax=ax)
     ax.set_title("Sazonalidade: taxa média por setor e trimestre")
     ax.set_xlabel("Trimestre")

@@ -100,10 +100,10 @@ st.sidebar.caption("Autor: Marcell Sidaco de Moraes")
 
 paginas = st.navigation([
     st.Page(pagina_inicial, title="Início", icon="🏠", default=True),
-    st.Page("pages/1_Visao_Geral.py", url_path="visao-geral", title="Visão geral", icon="📊"),
-    st.Page("pages/2_Evolucao_Temporal.py", url_path="evolucao-temporal", title="Evolução temporal", icon="📈"),
-    st.Page("pages/3_Regioes_e_Estados.py", url_path="regioes-e-estados", title="Regiões e estados", icon="🗺️"),
-    st.Page("pages/4_Analise_Economica.py", url_path="analise-economica", title="Análise econômica", icon="💰"),
-    st.Page("pages/5_Dados_e_Conclusao.py", url_path="dados-e-conclusao", title="Dados e conclusão", icon="📋"),
+    st.Page("pages/1_Visao_Geral.py", title="Visão geral", icon="📊"),
+    st.Page("pages/2_Evolucao_Temporal.py", title="Evolução temporal", icon="📈"),
+    st.Page("pages/3_Regioes_e_Estados.py", title="Regiões e estados", icon="🗺️"),
+    st.Page("pages/4_Analise_Economica.py", title="Análise econômica", icon="💰"),
+    st.Page("pages/5_Dados_e_Conclusao.py", title="Dados e conclusão", icon="📋"),
 ])
 paginas.run()
