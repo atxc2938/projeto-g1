@@ -273,8 +273,6 @@ def mostrar_kpis(df):
     """Seis cartões com os KPIs obrigatórios; a mediana aparece como curiosidade no primeiro."""
     k = calcular_kpis(df)
     melhorou = k["variacao_pp"] < 0
-    seta = (f'<span class="{"pos" if melhorou else "neg"}">{"▼" if melhorou else "▲"} '
-            f'{fmt_num(abs(k["variacao_pp"]), 2)} p.p.</span>')
     v.cartoes_kpi([
         dict(rotulo="Taxa média de desemprego", valor=k["taxa_media"], sufixo="%",
              apoio=f"Mediana <b>{fmt_pct(k['mediana'])}</b> (curiosidade)"),
@@ -285,8 +283,10 @@ def mostrar_kpis(df):
         dict(rotulo="Total de desempregados", valor=k["desempregados_total"] / 1e6, sufixo="mi",
              apoio=f"<b>{fmt_milhoes(k['desempregados_ultimo'])}</b> em {k['ultimo_periodo']}"),
         dict(rotulo="Renda média nacional", prefixo="R$", valor=k["renda_media"], apoio="Média salarial mensal"),
-        dict(rotulo="Evolução da taxa", valor=k["taxa_fim"], sufixo="%",
-             apoio=f"{seta} desde {k['periodo_inicio']}"),
+        dict(rotulo="Evolução da taxa", valor=k["variacao_pp"], sufixo="p.p.", sinal=True,
+             tom="pos" if melhorou else "neg",
+             apoio=f"de <b>{fmt_pct(k['taxa_inicio'])}</b> ({k['periodo_inicio']}) para "
+                   f"<b>{fmt_pct(k['taxa_fim'])}</b> ({k['periodo_fim']})"),
     ])
     return k
 

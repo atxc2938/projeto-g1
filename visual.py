@@ -216,8 +216,8 @@ div[data-testid="stVerticalBlockBorderWrapper"] {{ border-color: var(--borda) !i
 .kpi .val .pre {{ font-size: .62em; font-weight: 600; color: var(--texto-2); margin-right: 4px; }}
 .kpi .apoio {{ color: var(--texto-3); font-size: .86rem; line-height: 1.4; }}
 .kpi .apoio b {{ color: var(--texto-2); font-weight: 600; }}
-.kpi .pos {{ color: {POSITIVO}; font-weight: 600; }}
-.kpi .neg {{ color: {NEGATIVO}; font-weight: 600; }}
+.kpi .pos, .kpi .pos .suf {{ color: {POSITIVO}; font-weight: 600; }}
+.kpi .neg, .kpi .neg .suf {{ color: {NEGATIVO}; font-weight: 600; }}
 
 /* Interpretação */
 .interp {{ border-left: 3px solid var(--azul); background: rgba(57,135,229,.06); border-radius: 0 8px 8px 0;
@@ -285,8 +285,10 @@ def cartoes_kpi(cartoes):
             casas = c.get("casas", 2)
             pre = f'<span class="pre">{html.escape(c["prefixo"])}</span>' if c.get("prefixo") else ""
             suf = f'<span class="suf">{html.escape(c["sufixo"])}</span>' if c.get("sufixo") else ""
-            corpo = (f'{pre}<span class="contador" data-alvo="{c["valor"]:.{casas}f}" data-casas="{casas}">'
-                     f'{_fmt(c["valor"], casas)}</span>{suf}')
+            sinal = "+" if c.get("sinal") and c["valor"] > 0 else ""
+            tom = f' class="{c["tom"]}"' if c.get("tom") else ""
+            corpo = (f'<span{tom}>{pre}<span class="contador" data-alvo="{c["valor"]:.{casas}f}" data-casas="{casas}"'
+                     f'{" data-sinal=1" if c.get("sinal") else ""}>{sinal}{_fmt(c["valor"], casas)}</span>{suf}</span>')
         partes.append(f'<div class="kpi"><div class="rot">{html.escape(c["rotulo"])}</div>'
                       f'<div class="val">{corpo}</div><div class="apoio">{c.get("apoio", "")}</div></div>')
     script = """
@@ -296,7 +298,8 @@ def cartoes_kpi(cartoes):
   if (!grade || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   grade.querySelectorAll('.contador').forEach(function (el) {
     const alvo = parseFloat(el.dataset.alvo), casas = parseInt(el.dataset.casas, 10);
-    const fmt = new Intl.NumberFormat('pt-BR', {minimumFractionDigits: casas, maximumFractionDigits: casas});
+    const fmt = new Intl.NumberFormat('pt-BR', {minimumFractionDigits: casas, maximumFractionDigits: casas,
+                                                 signDisplay: el.dataset.sinal ? 'exceptZero' : 'auto'});
     const inicio = performance.now(), dur = 700;
     function passo(t) {
       const p = Math.min(1, (t - inicio) / dur), e = 1 - Math.pow(1 - p, 3);
