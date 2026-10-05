@@ -2,7 +2,8 @@
 gráficos e textos de interpretação.
 
 O banco SQLite (database/desemprego.sqlite) e o CSV tratado são gerados pelo
-notebook notebooks/analise_desemprego.ipynb.
+notebook notebooks/analise_desemprego.ipynb. O visual (tema escuro, CSS,
+template do Plotly e componentes) fica em visual.py.
 """
 
 import json
@@ -13,10 +14,13 @@ import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import seaborn as sns
 import streamlit as st
-from matplotlib.colors import LinearSegmentedColormap
+from plotly.subplots import make_subplots
 from sqlalchemy import create_engine
+
+import visual as v
 
 # ---------------------------------------------------------------------------
 # Caminhos
@@ -28,52 +32,16 @@ CAMINHO_GEOJSON = BASE_DIR / "dados" / "br_uf.geojson"
 CAMINHO_BANCO = BASE_DIR / "database" / "desemprego.sqlite"
 
 # ---------------------------------------------------------------------------
-# Cores (paleta categórica validada para daltonismo, ordem fixa por entidade)
+# Categorias e cores (as cores vêm de visual.py, ordem fixa por entidade)
 # ---------------------------------------------------------------------------
 ORDEM_REGIOES = ["Norte", "Nordeste", "Centro-Oeste", "Sudeste", "Sul"]
-CORES_REGIAO = {
-    "Norte": "#2a78d6",
-    "Nordeste": "#eb6834",
-    "Centro-Oeste": "#1baf7a",
-    "Sudeste": "#eda100",
-    "Sul": "#e87ba4",
-}
 ORDEM_RISCO = ["Baixo", "Médio", "Alto", "Crítico"]
-CORES_RISCO = {
-    "Baixo": "#0ca30c",
-    "Médio": "#fab219",
-    "Alto": "#ec835a",
-    "Crítico": "#d03b3b",
-}
 ORDEM_FAIXAS_RENDA = ["Até R$ 2 mil", "R$ 2 a 3 mil", "R$ 3 a 4 mil", "Acima de R$ 4 mil"]
 ORDEM_SETORES = ["Agropecuária", "Comércio", "Construção", "Indústria", "Serviços"]
-AZUL = "#2a78d6"
-AZUL_ESCURO = "#184f95"
-TINTA = "#0b0b0b"
-TINTA_SECUNDARIA = "#52514e"
-GRADE = "#e1e0d9"
-
-CMAP_SEQUENCIAL = LinearSegmentedColormap.from_list(
-    "azul", ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
-)
-CMAP_DIVERGENTE = LinearSegmentedColormap.from_list(
-    "azul_vermelho", ["#1c5cab", "#86b6ef", "#f0efec", "#f19a99", "#b42f2f"]
-)
-ESCALA_PLOTLY = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
-
-sns.set_theme(style="whitegrid", font_scale=0.95)
-plt.rcParams.update({
-    "axes.edgecolor": "#c3c2b7",
-    "axes.labelcolor": TINTA_SECUNDARIA,
-    "axes.titlecolor": TINTA,
-    "axes.titleweight": "bold",
-    "axes.titlesize": 12,
-    "grid.color": GRADE,
-    "xtick.color": TINTA_SECUNDARIA,
-    "ytick.color": TINTA_SECUNDARIA,
-    "figure.facecolor": "white",
-    "axes.facecolor": "#fcfcfb",
-})
+CORES_REGIAO = v.CORES_REGIAO
+CORES_RISCO = v.CORES_RISCO
+CMAP_SEQUENCIAL = v.CMAP_SEQUENCIAL
+CRISES = [("2015-10-01", "2016-12-31", "Crise 2016"), ("2020-01-01", "2021-12-31", "Pandemia")]
 
 # ---------------------------------------------------------------------------
 # Formatação pt-BR
@@ -189,7 +157,7 @@ def contar_registros_banco():
 
 def aplicar_filtros_sidebar(df):
     """Monta os 6 filtros obrigatórios na barra lateral e devolve a base filtrada."""
-    st.sidebar.header("Filtros")
+    st.sidebar.markdown("#### Filtros")
 
     anos = sorted(df["ano"].unique())
     ano_ini, ano_fim = st.sidebar.select_slider(
@@ -233,7 +201,7 @@ def aplicar_filtros_sidebar(df):
         & df["nivel_risco"].isin(riscos)
     )
     df_filtrado = df[filtro].copy()
-    st.sidebar.caption(f"{len(df_filtrado)} de {len(df)} registros selecionados.")
+    st.sidebar.caption(f"{len(df_filtrado)} de {len(df)} registros selecionados")
     return df_filtrado
 
 
@@ -244,8 +212,10 @@ def obter_base():
 
 def checar_vazio(df):
     if df.empty:
-        st.warning("Nenhum registro atende aos filtros escolhidos. Ajuste os filtros na barra lateral.")
+        st.warning("Nenhum registro atende aos filtros escolhidos. Ajuste os filtros na barra lateral "
+                   "ou use Limpar filtros.")
         st.stop()
+
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +223,7 @@ def checar_vazio(df):
 # ---------------------------------------------------------------------------
 
 def calcular_kpis(df):
-    """KPIs do Tema 04, calculados sobre a base filtrada."""
+    """KPIs do Tema 04 (e a mediana, como curiosidade) calculados sobre a base filtrada."""
     por_periodo = df.groupby("data")["taxa_desemprego"].mean().sort_index()
     ultimo = df["data"].max()
     ultimo_trim = df[df["data"] == ultimo]
@@ -265,6 +235,7 @@ def calcular_kpis(df):
 
     return {
         "taxa_media": df["taxa_desemprego"].mean(),
+        "mediana": df["taxa_desemprego"].median(),
         "taxa_ponderada": df["desempregados"].sum() / df["populacao_ativa"].sum() * 100,
         "uf_maior": por_uf.index[0],
         "uf_maior_nome": nomes[por_uf.index[0]],
@@ -299,176 +270,345 @@ def _inclinacao_anual(df):
 
 
 def mostrar_kpis(df):
+    """Seis cartões com os KPIs obrigatórios; a mediana aparece como curiosidade no primeiro."""
     k = calcular_kpis(df)
-    c1, c2, c3 = st.columns(3)
-    c1.metric(
-        "Taxa média de desemprego", fmt_pct(k["taxa_media"]),
-        help=f"Média simples das taxas. Ponderada pela população ativa: {fmt_pct(k['taxa_ponderada'])}.",
-    )
-    c2.metric(
-        "Estado com maior desemprego", f"{k['uf_maior']} · {fmt_pct(k['uf_maior_taxa'])}",
-        help=k["uf_maior_nome"],
-    )
-    c3.metric(
-        "Região mais afetada", k["regiao_maior"], f"{fmt_pct(k['regiao_maior_taxa'])} de média",
-        delta_color="off", delta_arrow="off",
-    )
-    c4, c5, c6 = st.columns(3)
-    c4.metric(
-        "Total de desempregados", fmt_milhoes(k["desempregados_total"]),
-        f"{fmt_milhoes(k['desempregados_ultimo'])} em {k['ultimo_periodo']}", delta_color="off",
-        delta_arrow="off",
-        help=(
-            "Soma de desempregados de todos os registros filtrados (estado x trimestre). Como a mesma "
-            "pessoa pode aparecer em vários trimestres, o número abaixo mostra o retrato do último trimestre."
-        ),
-    )
-    c5.metric("Renda média nacional", fmt_moeda(k["renda_media"], markdown=False))
-    c6.metric(
-        f"Evolução da taxa ({k['periodo_inicio']} a {k['periodo_fim']})",
-        fmt_pct(k["taxa_fim"]),
-        f"{fmt_num(k['variacao_pp'], 2)} p.p.",
-        delta_color="inverse",
-        help=f"Tendência linear: {fmt_num(k['inclinacao_anual'], 2)} p.p. por ano.",
-    )
+    melhorou = k["variacao_pp"] < 0
+    seta = (f'<span class="{"pos" if melhorou else "neg"}">{"▼" if melhorou else "▲"} '
+            f'{fmt_num(abs(k["variacao_pp"]), 2)} p.p.</span>')
+    v.cartoes_kpi([
+        dict(rotulo="Taxa média de desemprego", valor=k["taxa_media"], sufixo="%",
+             apoio=f"Mediana <b>{fmt_pct(k['mediana'])}</b> (curiosidade)"),
+        dict(rotulo="Estado com maior desemprego", prefixo=k["uf_maior"], valor=k["uf_maior_taxa"], sufixo="%",
+             apoio=f"{k['uf_maior_nome']}"),
+        dict(rotulo="Região mais afetada", texto=k["regiao_maior"],
+             apoio=f"<b>{fmt_pct(k['regiao_maior_taxa'])}</b> de taxa média"),
+        dict(rotulo="Total de desempregados", valor=k["desempregados_total"] / 1e6, sufixo="mi",
+             apoio=f"<b>{fmt_milhoes(k['desempregados_ultimo'])}</b> em {k['ultimo_periodo']}"),
+        dict(rotulo="Renda média nacional", prefixo="R$", valor=k["renda_media"], apoio="Média salarial mensal"),
+        dict(rotulo="Evolução da taxa", valor=k["taxa_fim"], sufixo="%",
+             apoio=f"{seta} desde {k['periodo_inicio']}"),
+    ])
     return k
 
 
+def _regiao_de(df, uf):
+    return str(df.loc[df["uf"] == uf, "regiao"].iloc[0])
+
+
 # ---------------------------------------------------------------------------
-# Gráficos Matplotlib / Seaborn
+# Gráficos interativos Plotly (animações, hover e transições)
 # ---------------------------------------------------------------------------
 
-def _figura(largura=10, altura=4.2):
-    fig, ax = plt.subplots(figsize=(largura, altura))
-    sns.despine(fig=fig)
-    return fig, ax
+def _regioes_presentes(df):
+    return [r for r in ORDEM_REGIOES if r in set(df["regiao"].astype(str))]
 
 
-def grafico_linha_temporal(df):
-    """Linha temporal: taxa média nacional + média móvel de 4 trimestres."""
-    serie = df.groupby("data")["taxa_desemprego"].mean().sort_index()
-    fig, ax = _figura()
-    ax.plot(serie.index, serie.values, color=AZUL, lw=2, marker="o", ms=4, label="Taxa média trimestral")
-    if len(serie) >= 4:
-        movel = serie.rolling(4).mean()
-        ax.plot(movel.index, movel.values, color=TINTA_SECUNDARIA, lw=2, ls="--", label="Média móvel (4 trimestres)")
-    for inicio, fim, rotulo in [("2015-10-01", "2016-12-31", "Crise 2016"), ("2020-01-01", "2021-12-31", "Pandemia")]:
+def linha_temporal(df, estatistica="Média"):
+    """Linha temporal da taxa (média ou mediana) com média móvel, crises e range slider."""
+    agregacao = "median" if estatistica == "Mediana" else "mean"
+    serie = (df.groupby(["data", "periodo"])["taxa_desemprego"].agg(agregacao)
+             .reset_index().sort_values("data"))
+    serie["movel"] = serie["taxa_desemprego"].rolling(4).mean()
+    fig = go.Figure()
+    for inicio, fim, rotulo in CRISES:
         ini, fi = pd.Timestamp(inicio), pd.Timestamp(fim)
-        if serie.index.min() <= fi and serie.index.max() >= ini:
-            ax.axvspan(ini, fi, color="#f0efec", zorder=0)
-            ax.text(ini + (fi - ini) / 2, ax.get_ylim()[1], rotulo, ha="center", va="top", fontsize=9, color=TINTA_SECUNDARIA)
-    ax.set_title("Evolução da taxa média de desemprego")
-    ax.set_xlabel("Trimestre")
-    ax.set_ylabel("Taxa de desemprego")
-    eixo_pct(ax)
-    ax.legend(frameon=False, loc="lower left")
-    fig.tight_layout()
-    return fig
-
-
-def grafico_linha_regioes(df):
-    """Uma linha por região (média anual)."""
-    tab = df.groupby(["ano", "regiao"], observed=True)["taxa_desemprego"].mean().reset_index()
-    fig, ax = _figura()
-    sns.lineplot(
-        data=tab, x="ano", y="taxa_desemprego", hue="regiao", palette=CORES_REGIAO,
-        hue_order=[r for r in ORDEM_REGIOES if r in tab["regiao"].unique()],
-        marker="o", lw=2, ax=ax,
+        if serie["data"].min() <= fi and serie["data"].max() >= ini:
+            fig.add_vrect(x0=ini, x1=fi, fillcolor="rgba(255,255,255,0.045)", line_width=0, layer="below",
+                          annotation_text=rotulo, annotation_position="top left",
+                          annotation_font=dict(color=v.TEXTO_3, size=11))
+    fig.add_trace(go.Scatter(
+        x=serie["data"], y=serie["taxa_desemprego"], name=f"{estatistica} trimestral", mode="lines+markers",
+        line=dict(color=v.AZUL, width=3, shape="spline", smoothing=0.5),
+        marker=dict(size=7, color=v.AZUL, line=dict(color=v.FUNDO, width=1.5)),
+        customdata=serie["periodo"], hovertemplate="%{customdata}: <b>%{y:.2f}%</b><extra></extra>",
+    ))
+    if len(serie) >= 4:
+        fig.add_trace(go.Scatter(
+            x=serie["data"], y=serie["movel"], name="Média móvel (4 trimestres)", mode="lines",
+            line=dict(color=v.TEXTO_2, width=2, dash="dot"),
+            hovertemplate="Média móvel: %{y:.2f}%<extra></extra>",
+        ))
+    referencia = df["taxa_desemprego"].agg(agregacao)
+    fig.add_hline(y=referencia, line=dict(color=v.TEXTO_3, width=1, dash="dash"),
+                  annotation_text=f"{estatistica} do período: {fmt_pct(referencia)}",
+                  annotation_position="bottom right", annotation_font=dict(color=v.TEXTO_2, size=12))
+    fig.update_layout(
+        title=f"Evolução da {estatistica.lower()} da taxa de desemprego",
+        hovermode="x unified", legend=dict(orientation="h"),
+        yaxis=dict(ticksuffix="%", title=None),
+        xaxis=dict(title=None, rangeslider=dict(visible=True, thickness=0.07, bgcolor=v.CARTAO, bordercolor=v.BORDA)),
     )
-    for regiao, grupo in tab.groupby("regiao", observed=True):
-        ultimo = grupo.iloc[-1]
-        ax.annotate(regiao, (ultimo["ano"], ultimo["taxa_desemprego"]), xytext=(6, 0),
-                    textcoords="offset points", va="center", fontsize=9, color=TINTA_SECUNDARIA)
-    ax.set_title("Taxa média anual de desemprego por região")
-    ax.set_xlabel("Ano")
-    ax.set_ylabel("Taxa de desemprego")
-    ax.set_xticks(sorted(tab["ano"].unique()))
-    eixo_pct(ax)
-    ax.legend(title="Região", frameon=False, bbox_to_anchor=(1.12, 1), loc="upper left")
-    fig.tight_layout()
-    return fig
+    return v.finalizar(fig, 470)
 
 
-def grafico_barras_estado(df):
-    """Barras horizontais por estado, coloridas pela região."""
-    tab = (
-        df.groupby(["uf", "regiao"], observed=True)["taxa_desemprego"].mean()
-        .reset_index().sort_values("taxa_desemprego", ascending=False)
-    )
-    media = df["taxa_desemprego"].mean()
-    fig, ax = _figura(10, max(3.5, 0.32 * len(tab) + 1))
-    cores = tab["regiao"].map(CORES_REGIAO)
-    ax.barh(tab["uf"], tab["taxa_desemprego"], color=cores, edgecolor="white", linewidth=1)
-    ax.invert_yaxis()
-    ax.axvline(media, color=TINTA_SECUNDARIA, ls="--", lw=1.2)
-    ax.text(media, -0.8, f" média {fmt_pct(media)}", fontsize=9, color=TINTA_SECUNDARIA, va="bottom")
-    for y, v in enumerate(tab["taxa_desemprego"]):
-        ax.text(v + 0.1, y, fmt_pct(v), va="center", fontsize=8, color=TINTA_SECUNDARIA)
-    alcas = [plt.Rectangle((0, 0), 1, 1, color=CORES_REGIAO[r]) for r in ORDEM_REGIOES if r in set(tab["regiao"])]
-    ax.legend(alcas, [r for r in ORDEM_REGIOES if r in set(tab["regiao"])], title="Região",
-              frameon=False, loc="lower right")
-    ax.set_title("Taxa média de desemprego por estado")
-    ax.set_xlabel("Taxa de desemprego")
-    ax.set_ylabel("")
-    eixo_pct(ax, "x")
-    ax.grid(axis="y", visible=False)
-    fig.tight_layout()
-    return fig
+def barras_regiao(df, animar=False):
+    """Barras por região (comparação nacional), com opção de animação ano a ano."""
+    regioes = _regioes_presentes(df)
+    if animar:
+        tab = (df.groupby(["ano", "regiao"], observed=True)["taxa_desemprego"].mean().reset_index())
+        tab["regiao"] = tab["regiao"].astype(str)
+        fig = px.bar(tab, x="regiao", y="taxa_desemprego", color="regiao", animation_frame="ano",
+                     color_discrete_map=CORES_REGIAO, category_orders={"regiao": regioes},
+                     range_y=[0, tab["taxa_desemprego"].max() * 1.18], text="taxa_desemprego",
+                     labels={"regiao": "Região", "taxa_desemprego": "Taxa média (%)", "ano": "Ano"})
+        fig.update_traces(texttemplate="%{y:.2f}%", textposition="outside", cliponaxis=False,
+                          marker_line_width=0, hovertemplate="%{x}: <b>%{y:.2f}%</b><extra></extra>")
+        for quadro in fig.frames:
+            for trace in quadro.data:
+                trace.update(texttemplate="%{y:.2f}%", textposition="outside")
+        fig.update_layout(title="Taxa média por região, ano a ano (aperte ▶)", showlegend=False,
+                          yaxis=dict(ticksuffix="%", title=None), xaxis=dict(title=None))
+        return v.finalizar(fig, 470)
 
-
-def grafico_barras_regiao(df):
     tab = df.groupby("regiao", observed=True)["taxa_desemprego"].mean().sort_values(ascending=False)
-    fig, ax = _figura(8, 3.8)
-    ax.bar(tab.index.astype(str), tab.values, color=[CORES_REGIAO[r] for r in tab.index],
-           edgecolor="white", linewidth=2, width=0.6)
-    for x, v in enumerate(tab.values):
-        ax.text(x, v + 0.15, fmt_pct(v), ha="center", fontsize=10, color=TINTA)
-    ax.axhline(df["taxa_desemprego"].mean(), color=TINTA_SECUNDARIA, ls="--", lw=1.2, label="Média geral")
-    ax.set_title("Taxa média de desemprego por região")
-    ax.set_ylabel("Taxa de desemprego")
-    ax.set_xlabel("")
-    eixo_pct(ax)
-    ax.grid(axis="x", visible=False)
-    ax.legend(frameon=False)
-    fig.tight_layout()
-    return fig
+    fig = go.Figure(go.Bar(
+        x=tab.index.astype(str), y=tab.values, marker=dict(color=[CORES_REGIAO[r] for r in tab.index],
+                                                           cornerradius=8),
+        text=tab.values, texttemplate="<b>%{y:.2f}%</b>", textposition="outside", cliponaxis=False,
+        hovertemplate="%{x}: <b>%{y:.2f}%</b><extra></extra>",
+    ))
+    media = df["taxa_desemprego"].mean()
+    fig.add_hline(y=media, line=dict(color=v.TEXTO_2, dash="dash", width=1.2),
+                  annotation_text=f"Média nacional {fmt_pct(media)}", annotation_font=dict(color=v.TEXTO_2))
+    fig.update_layout(title="Taxa média de desemprego por região", showlegend=False,
+                      yaxis=dict(ticksuffix="%", title=None, range=[0, tab.max() * 1.18]), xaxis=dict(title=None))
+    return v.finalizar(fig, 420)
 
 
-def grafico_dispersao_renda(df):
-    fig, ax = _figura(9, 4.6)
-    sns.scatterplot(
-        data=df, x="renda_media", y="taxa_desemprego", hue="regiao", palette=CORES_REGIAO,
-        hue_order=[r for r in ORDEM_REGIOES if r in set(df["regiao"])],
-        s=40, alpha=0.75, edgecolor="white", linewidth=0.6, ax=ax,
+def ranking_estados(df, animar=False):
+    """Barras por estado. Animado: corrida de barras que se reordena a cada ano."""
+    if animar:
+        tab = df.groupby(["ano", "uf", "estado", "regiao"], observed=True)["taxa_desemprego"].mean().reset_index()
+        tab["regiao"] = tab["regiao"].astype(str)
+        tab["posicao"] = tab.groupby("ano")["taxa_desemprego"].rank(ascending=False, method="first")
+        n = tab["uf"].nunique()
+        fig = px.bar(tab, x="taxa_desemprego", y="posicao", color="regiao", orientation="h",
+                     animation_frame="ano", animation_group="uf", text="uf", hover_name="estado",
+                     color_discrete_map=CORES_REGIAO, category_orders={"regiao": _regioes_presentes(df)},
+                     range_x=[0, tab["taxa_desemprego"].max() * 1.12],
+                     labels={"taxa_desemprego": "Taxa média (%)", "posicao": "Posição", "regiao": "Região", "ano": "Ano"})
+        fig.update_traces(texttemplate="<b>%{text}</b>  %{x:.1f}%", textposition="inside", insidetextanchor="start",
+                          textfont=dict(color="white", size=12), marker_line_width=0,
+                          hovertemplate="<b>%{hovertext}</b><br>Taxa: %{x:.2f}%<br>Posição: %{y}º<extra></extra>")
+        for quadro in fig.frames:
+            for trace in quadro.data:
+                trace.update(texttemplate="<b>%{text}</b>  %{x:.1f}%", textposition="inside", insidetextanchor="start")
+        fig.update_layout(title="Corrida do ranking estadual (aperte ▶)",
+                          yaxis=dict(autorange="reversed", showticklabels=False, title=None, range=[n + 0.5, 0.5]),
+                          xaxis=dict(ticksuffix="%", title=None), legend=dict(orientation="h"),
+                          bargap=0.15)
+        return v.finalizar(fig, max(460, 30 * n + 170))
+
+    tab = (df.groupby(["uf", "estado", "regiao"], observed=True)["taxa_desemprego"].mean()
+           .reset_index().sort_values("taxa_desemprego"))
+    tab["regiao"] = tab["regiao"].astype(str)
+    fig = go.Figure()
+    for regiao in _regioes_presentes(df):
+        parte = tab[tab["regiao"] == regiao]
+        fig.add_trace(go.Bar(
+            x=parte["taxa_desemprego"], y=parte["uf"], orientation="h", name=regiao,
+            marker=dict(color=CORES_REGIAO[regiao], cornerradius=6), customdata=parte[["estado", "uf"]],
+            text=parte["taxa_desemprego"], texttemplate="%{x:.2f}%", textposition="outside", cliponaxis=False,
+            hovertemplate="<b>%{customdata[0]}</b><br>Taxa média: %{x:.2f}%<extra></extra>",
+        ))
+    media = df["taxa_desemprego"].mean()
+    fig.add_vline(x=media, line=dict(color=v.TEXTO_2, dash="dash", width=1.2),
+                  annotation_text=f"média {fmt_pct(media)}", annotation_font=dict(color=v.TEXTO_2))
+    fig.update_layout(title="Taxa média de desemprego por estado (clique numa barra para detalhar)",
+                      barmode="overlay", bargap=0.25,
+                      yaxis=dict(categoryorder="array", categoryarray=tab["uf"].tolist(), title=None),
+                      xaxis=dict(ticksuffix="%", title=None, range=[0, tab["taxa_desemprego"].max() * 1.12]),
+                      legend=dict(orientation="h"))
+    return v.finalizar(fig, max(420, 26 * len(tab) + 140))
+
+
+def mapa_uf(df, animar=False):
+    """Mapa coroplético da taxa média por estado; animado ano a ano ou clicável."""
+    escala = ["#1c3358", "#1c5cab", "#3987e5", "#86b6ef", "#e3efff"]
+    if animar:
+        tab = (df.groupby(["ano", "uf", "estado", "codigo_ibge"], observed=True)["taxa_desemprego"].mean()
+               .reset_index())
+    else:
+        tab = (df.groupby(["uf", "estado", "codigo_ibge", "regiao"], observed=True)
+               .agg(taxa_desemprego=("taxa_desemprego", "mean"), renda_media=("renda_media", "mean"))
+               .reset_index())
+    tab["codigo_ibge"] = tab["codigo_ibge"].astype(str)
+    faixa = [df.groupby(["ano", "uf"])["taxa_desemprego"].mean().min(),
+             df.groupby(["ano", "uf"])["taxa_desemprego"].mean().max()] if animar else None
+    fig = px.choropleth(
+        tab, geojson=carregar_geojson(), locations="codigo_ibge", featureidkey="properties.codarea",
+        color="taxa_desemprego", color_continuous_scale=escala, range_color=faixa,
+        animation_frame="ano" if animar else None, hover_name="estado", custom_data=["uf"],
+        labels={"taxa_desemprego": "Taxa (%)", "ano": "Ano"},
     )
-    if len(df) > 2:
-        sns.regplot(data=df, x="renda_media", y="taxa_desemprego", scatter=False,
-                    color=TINTA, line_kws={"lw": 2, "ls": "--"}, ax=ax)
-    r = df["renda_media"].corr(df["taxa_desemprego"]) if len(df) > 2 else float("nan")
-    ax.set_title(f"Renda média x taxa de desemprego (r = {fmt_num(r, 2)})")
-    ax.set_xlabel("Renda média mensal")
-    ax.set_ylabel("Taxa de desemprego")
-    eixo_pct(ax)
-    eixo_moeda(ax, "x")
-    ax.legend(title="Região", frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
-    fig.tight_layout()
-    return fig
+    fig.update_traces(marker_line_color=v.FUNDO, marker_line_width=1.2,
+                      hovertemplate="<b>%{hovertext}</b><br>Taxa média: %{z:.2f}%<extra></extra>")
+    if animar:
+        for quadro in fig.frames:
+            for trace in quadro.data:
+                trace.update(hovertemplate="<b>%{hovertext}</b><br>Taxa média: %{z:.2f}%<extra></extra>")
+    fig.update_geos(visible=False, bgcolor="rgba(0,0,0,0)", projection_type="mercator",
+                    lataxis_range=[-34.5, 6], lonaxis_range=[-75, -33], center=dict(lat=-14, lon=-53))
+    fig.update_layout(
+        title="Taxa média de desemprego por estado" + (" ano a ano (aperte ▶)" if animar else " (clique num estado)"),
+        coloraxis_colorbar=dict(title="Taxa", ticksuffix="%", thickness=14, len=0.75),
+        margin=dict(l=0, r=0, t=56, b=0), clickmode="event+select",
+    )
+    return v.finalizar(fig, 560)
 
 
-def grafico_inflacao_desemprego(df):
-    """Inflação x desemprego: média anual em dois painéis com o mesmo eixo X."""
+def dispersao(df, eixo_x="renda_media", animar=False):
+    """Dispersão de uma variável econômica contra a taxa (bolha = população ativa)."""
+    rotulos = {"renda_media": "Renda média (R$)", "inflacao": "Inflação (%)", "vagas_formais": "Vagas formais",
+               "taxa_desemprego": "Taxa de desemprego (%)", "regiao": "Região", "populacao_ativa": "População ativa",
+               "ano": "Ano"}
+    base = df.copy()
+    base["regiao"] = base["regiao"].astype(str)
+    regioes = _regioes_presentes(df)
+    margem_x = (base[eixo_x].max() - base[eixo_x].min()) * 0.05
+    fig = px.scatter(
+        base, x=eixo_x, y="taxa_desemprego", color="regiao", symbol="regiao", size="populacao_ativa",
+        size_max=18 if animar else 11, color_discrete_map=CORES_REGIAO, symbol_map=v.SIMBOLOS_REGIAO,
+        category_orders={"regiao": regioes}, hover_name="estado",
+        hover_data={"periodo": True, "setor_predominante": True, "populacao_ativa": ":,.0f", "regiao": False},
+        animation_frame="ano" if animar else None, animation_group="uf" if animar else None,
+        range_x=[base[eixo_x].min() - margem_x, base[eixo_x].max() + margem_x],
+        range_y=[0, base["taxa_desemprego"].max() * 1.08], labels=rotulos, opacity=0.85 if animar else 0.7,
+    )
+    fig.update_traces(marker=dict(line=dict(color=v.FUNDO, width=1)))
+    r = base[eixo_x].corr(base["taxa_desemprego"]) if len(base) > 2 else float("nan")
+    if not animar and len(base) > 2:
+        a, b = np.polyfit(base[eixo_x], base["taxa_desemprego"], 1)
+        xs = np.linspace(base[eixo_x].min(), base[eixo_x].max(), 50)
+        fig.add_trace(go.Scatter(x=xs, y=a * xs + b, mode="lines", name="Tendência linear",
+                                 line=dict(color=v.TEXTO, width=2, dash="dash"), hoverinfo="skip"))
+    fig.update_layout(
+        title=f"{rotulos[eixo_x]} x taxa de desemprego (r = {fmt_num(r, 2)})" + (" · aperte ▶" if animar else ""),
+        yaxis=dict(ticksuffix="%"), legend=dict(orientation="h"),
+    )
+    if eixo_x == "renda_media":
+        fig.update_xaxes(tickprefix="R$ ")
+    return v.finalizar(fig, 520)
+
+
+def linhas_regiao(df):
+    tab = df.groupby(["ano", "regiao"], observed=True)["taxa_desemprego"].mean().reset_index()
+    tab["regiao"] = tab["regiao"].astype(str)
+    fig = go.Figure()
+    for regiao in _regioes_presentes(df):
+        parte = tab[tab["regiao"] == regiao]
+        fig.add_trace(go.Scatter(
+            x=parte["ano"], y=parte["taxa_desemprego"], name=regiao, mode="lines+markers",
+            line=dict(color=CORES_REGIAO[regiao], width=3, shape="spline", smoothing=0.5),
+            marker=dict(size=7, symbol=v.SIMBOLOS_REGIAO[regiao], line=dict(color=v.FUNDO, width=1)),
+            hovertemplate=f"{regiao}: <b>%{{y:.2f}}%</b><extra></extra>",
+        ))
+        fig.add_annotation(x=parte["ano"].iloc[-1], y=parte["taxa_desemprego"].iloc[-1], text=f"<b>{regiao}</b>",
+                           xanchor="left", xshift=10, showarrow=False, font=dict(color=CORES_REGIAO[regiao], size=12))
+    fig.update_layout(title="Taxa média anual por região", hovermode="x unified",
+                      yaxis=dict(ticksuffix="%", title=None), xaxis=dict(dtick=1, title=None),
+                      legend=dict(orientation="h"), margin=dict(r=110))
+    return v.finalizar(fig, 450)
+
+
+def linha_estados(df, ufs):
+    tab = df[df["uf"].isin(ufs)].groupby(["data", "periodo", "uf"])["taxa_desemprego"].mean().reset_index()
+    paleta = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"]
+    fig = px.line(tab, x="data", y="taxa_desemprego", color="uf", markers=True, line_shape="spline",
+                  custom_data=["periodo"], color_discrete_sequence=paleta,
+                  labels={"data": "Trimestre", "taxa_desemprego": "Taxa (%)", "uf": "UF"})
+    fig.update_traces(line_width=2.6, marker_size=6,
+                      hovertemplate="%{fullData.name}: <b>%{y:.2f}%</b><extra></extra>")
+    fig.update_layout(title="Comparação trimestral entre estados", hovermode="x unified",
+                      yaxis=dict(ticksuffix="%", title=None), xaxis=dict(title=None),
+                      legend=dict(orientation="h"))
+    return v.finalizar(fig, 440)
+
+
+def inflacao_desemprego(df):
+    """Dois painéis com o mesmo eixo de tempo (sem eixo duplo)."""
     tab = df.groupby("ano")[["taxa_desemprego", "inflacao"]].mean()
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 5.2), sharex=True)
-    sns.despine(fig=fig)
-    ax1.plot(tab.index, tab["taxa_desemprego"], color=AZUL, lw=2, marker="o")
-    ax1.set_ylabel("Desemprego")
-    ax1.set_title("Desemprego e inflação: médias anuais")
-    eixo_pct(ax1)
-    ax2.plot(tab.index, tab["inflacao"], color="#eb6834", lw=2, marker="o")
-    ax2.set_ylabel("Inflação")
-    ax2.set_xlabel("Ano")
-    ax2.set_xticks(tab.index)
-    eixo_pct(ax2)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+                        subplot_titles=("Desemprego (média anual)", "Inflação (média anual)"))
+    fig.add_trace(go.Scatter(x=tab.index, y=tab["taxa_desemprego"], name="Desemprego", mode="lines+markers",
+                             line=dict(color=v.AZUL, width=3, shape="spline", smoothing=0.5), marker=dict(size=8),
+                             hovertemplate="Desemprego: <b>%{y:.2f}%</b><extra></extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=tab.index, y=tab["inflacao"], name="Inflação", mode="lines+markers",
+                             line=dict(color=v.LARANJA, width=3, shape="spline", smoothing=0.5), marker=dict(size=8),
+                             hovertemplate="Inflação: <b>%{y:.2f}%</b><extra></extra>"), row=2, col=1)
+    fig.update_yaxes(ticksuffix="%")
+    fig.update_xaxes(dtick=1)
+    fig.update_annotations(font=dict(color=v.TEXTO_2, size=13))
+    fig.update_layout(hovermode="x unified", showlegend=False, margin=dict(t=40))
+    return v.finalizar(fig, 500)
+
+
+def renda_regiao(df):
+    tab = df.groupby(["ano", "regiao"], observed=True)["renda_media"].mean().reset_index()
+    tab["regiao"] = tab["regiao"].astype(str)
+    fig = px.line(tab, x="ano", y="renda_media", color="regiao", markers=True, line_shape="spline",
+                  color_discrete_map=CORES_REGIAO, category_orders={"regiao": _regioes_presentes(df)},
+                  labels={"ano": "Ano", "renda_media": "Renda média (R$)", "regiao": "Região"})
+    fig.update_traces(line_width=2.6, hovertemplate="%{fullData.name}: <b>R$ %{y:,.2f}</b><extra></extra>")
+    fig.update_layout(title="Renda média mensal por região", hovermode="x unified",
+                      yaxis=dict(tickprefix="R$ ", title=None), xaxis=dict(dtick=1, title=None),
+                      legend=dict(orientation="h"))
+    return v.finalizar(fig, 430)
+
+
+def risco_regiao(df):
+    tab = pd.crosstab(df["regiao"], df["nivel_risco"]).reindex(columns=ORDEM_RISCO, fill_value=0)
+    tab = tab.loc[tab.sum(axis=1) > 0]
+    fig = go.Figure()
+    for nivel in ORDEM_RISCO:
+        fig.add_trace(go.Bar(
+            y=tab.index.astype(str), x=tab[nivel], name=nivel, orientation="h",
+            marker=dict(color=CORES_RISCO[nivel], line=dict(color=v.FUNDO, width=2)),
+            text=tab[nivel].where(tab[nivel] > 0), texttemplate="%{x}", textposition="inside",
+            textfont=dict(color="#0b0b0b"),
+            hovertemplate=f"%{{y}} · {nivel}: <b>%{{x}}</b> registros<extra></extra>",
+        ))
+    fig.update_layout(title="Registros por nível de risco em cada região", barmode="stack",
+                      yaxis=dict(autorange="reversed", title=None), xaxis=dict(title="Registros (estado x trimestre)"),
+                      legend=dict(orientation="h"))
+    return v.finalizar(fig, 380)
+
+
+def detalhe_estado(df, uf):
+    """Série do estado escolhido comparada com a média dos demais estados filtrados."""
+    estado = df[df["uf"] == uf].groupby(["data", "periodo"])["taxa_desemprego"].mean().reset_index()
+    resto = df[df["uf"] != uf].groupby("data")["taxa_desemprego"].mean()
+    regiao = _regiao_de(df, uf)
+    fig = go.Figure()
+    if not resto.empty:
+        fig.add_trace(go.Scatter(x=resto.index, y=resto.values, name="Média dos outros estados", mode="lines",
+                                 line=dict(color=v.TEXTO_3, width=2, dash="dot"),
+                                 hovertemplate="Outros: %{y:.2f}%<extra></extra>"))
+    fig.add_trace(go.Scatter(x=estado["data"], y=estado["taxa_desemprego"], name=uf, mode="lines+markers",
+                             line=dict(color=CORES_REGIAO[regiao], width=3, shape="spline", smoothing=0.5),
+                             fill="tonexty" if not resto.empty else None, fillcolor="rgba(57,135,229,0.06)",
+                             customdata=estado["periodo"],
+                             hovertemplate="%{customdata}: <b>%{y:.2f}%</b><extra></extra>"))
+    fig.update_layout(hovermode="x unified", yaxis=dict(ticksuffix="%", title=None), xaxis=dict(title=None),
+                      legend=dict(orientation="h"), margin=dict(t=30))
+    return v.finalizar(fig, 330)
+
+
+# ---------------------------------------------------------------------------
+# Gráficos estatísticos Matplotlib / Seaborn (tema escuro de visual.py)
+# ---------------------------------------------------------------------------
+
+def _heatmap(tab, casas, titulo, rotulo_barra, largura=8, altura=None, xlabel="", ylabel=""):
+    altura = altura or max(3.2, 0.48 * len(tab) + 1.4)
+    fig, ax = plt.subplots(figsize=(largura, altura))
+    sns.heatmap(tab, annot=anotacoes(tab, casas), fmt="", cmap=CMAP_SEQUENCIAL, linewidths=2.5,
+                linecolor=v.CARTAO, annot_kws={"fontsize": 10.5, "fontweight": "bold"},
+                cbar_kws={"label": rotulo_barra, "shrink": 0.85}, ax=ax)
+    ax.set_title(titulo, loc="left")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.tick_params(length=0)
+    ax.collections[0].colorbar.outline.set_visible(False)
     fig.tight_layout()
     return fig
 
@@ -476,108 +616,55 @@ def grafico_inflacao_desemprego(df):
 def grafico_heatmap_trimestral(df):
     tab = df.pivot_table(index="ano", columns="trimestre", values="taxa_desemprego", aggfunc="mean")
     tab.columns = [f"T{c}" for c in tab.columns]
-    fig, ax = plt.subplots(figsize=(7, max(3, 0.42 * len(tab) + 1)))
-    sns.heatmap(
-        tab, annot=anotacoes(tab, 2), fmt="", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
-        cbar_kws={"label": "Taxa média de desemprego (%)"}, ax=ax,
-    )
-    ax.set_title("Heatmap trimestral da taxa de desemprego")
-    ax.set_xlabel("Trimestre")
-    ax.set_ylabel("Ano")
-    fig.tight_layout()
-    return fig
+    return _heatmap(tab, 2, "", "Taxa média (%)", largura=7.5,
+                    xlabel="Trimestre", ylabel="Ano")
 
 
 def grafico_heatmap_regiao_ano(df):
     tab = df.pivot_table(index="regiao", columns="ano", values="taxa_desemprego", aggfunc="mean", observed=True)
-    fig, ax = plt.subplots(figsize=(10, 3.4))
-    sns.heatmap(tab, annot=anotacoes(tab, 1), fmt="", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
-                cbar_kws={"label": "%"}, ax=ax)
-    ax.set_title("Taxa média de desemprego por região e ano")
-    ax.set_xlabel("Ano")
-    ax.set_ylabel("")
-    fig.tight_layout()
-    return fig
+    return _heatmap(tab, 1, "Taxa média por região e ano (%)", "%", largura=12, altura=3.6)
+
+
+def grafico_sazonalidade_setor(df):
+    tab = df.pivot_table(index="setor_predominante", columns="trimestre", values="taxa_desemprego", aggfunc="mean")
+    tab.columns = [f"T{c}" for c in tab.columns]
+    return _heatmap(tab, 2, "Taxa média por setor e trimestre (%)", "%", largura=7.5,
+                    altura=4.2, xlabel="Trimestre")
 
 
 COLUNAS_CORRELACAO = {
-    "taxa_desemprego": "Desemprego",
-    "renda_media": "Renda média",
-    "inflacao": "Inflação",
-    "vagas_formais": "Vagas formais",
-    "populacao_ativa": "População ativa",
+    "taxa_desemprego": "Desemprego", "renda_media": "Renda média", "inflacao": "Inflação",
+    "vagas_formais": "Vagas formais", "populacao_ativa": "População ativa",
 }
 
 
 def grafico_correlacao(df):
     corr = df[list(COLUNAS_CORRELACAO)].rename(columns=COLUNAS_CORRELACAO).corr()
     mascara = np.triu(np.ones_like(corr, dtype=bool), k=1)
-    fig, ax = plt.subplots(figsize=(6.5, 5))
-    sns.heatmap(corr, mask=mascara, annot=anotacoes(corr, 2), fmt="", cmap=CMAP_DIVERGENTE, vmin=-1, vmax=1,
-                linewidths=2, linecolor="white", cbar_kws={"label": "Correlação de Pearson"}, ax=ax)
-    ax.set_title("Matriz de correlação")
-    fig.tight_layout()
-    return fig
-
-
-def grafico_sazonalidade_setor(df):
-    tab = df.pivot_table(index="setor_predominante", columns="trimestre",
-                         values="taxa_desemprego", aggfunc="mean")
-    tab.columns = [f"T{c}" for c in tab.columns]
-    fig, ax = plt.subplots(figsize=(7, 3.6))
-    sns.heatmap(tab, annot=anotacoes(tab, 2), fmt="", cmap=CMAP_SEQUENCIAL, linewidths=2, linecolor="white",
-                cbar_kws={"label": "%"}, ax=ax)
-    ax.set_title("Sazonalidade: taxa média por setor e trimestre")
-    ax.set_xlabel("Trimestre")
-    ax.set_ylabel("")
+    fig, ax = plt.subplots(figsize=(7, 5.4))
+    sns.heatmap(corr, mask=mascara, annot=anotacoes(corr, 2), fmt="", cmap=v.CMAP_DIVERGENTE, vmin=-1, vmax=1,
+                linewidths=2.5, linecolor=v.CARTAO, annot_kws={"fontsize": 11, "fontweight": "bold"},
+                cbar_kws={"label": "Correlação de Pearson", "shrink": 0.85}, ax=ax)
+    ax.set_title("Matriz de correlação", loc="left")
+    ax.tick_params(length=0)
+    ax.collections[0].colorbar.outline.set_visible(False)
     fig.tight_layout()
     return fig
 
 
 def grafico_boxplot_setor(df):
     ordem = df.groupby("setor_predominante")["taxa_desemprego"].median().sort_values(ascending=False).index
-    fig, ax = _figura(9, 4)
-    sns.boxplot(data=df, x="setor_predominante", y="taxa_desemprego", order=ordem,
-                color="#86b6ef", linecolor=AZUL_ESCURO, width=0.55, ax=ax)
-    ax.set_title("Distribuição da taxa de desemprego por setor predominante")
+    fig, ax = plt.subplots(figsize=(8.5, 4.6))
+    sns.boxplot(data=df, x="setor_predominante", y="taxa_desemprego", order=ordem, width=0.55,
+                color="#1c4b8a", linecolor=v.AZUL_CLARO, linewidth=1.4,
+                flierprops=dict(marker="o", markerfacecolor=v.LARANJA, markeredgecolor=v.LARANJA, markersize=4), ax=ax)
+    sns.stripplot(data=df, x="setor_predominante", y="taxa_desemprego", order=ordem, color=v.AZUL_CLARO,
+                  alpha=0.18, size=2.5, jitter=0.22, ax=ax)
+    ax.set_title("Distribuição da taxa por setor predominante", loc="left")
     ax.set_xlabel("")
     ax.set_ylabel("Taxa de desemprego")
     eixo_pct(ax)
-    fig.tight_layout()
-    return fig
-
-
-def grafico_risco(df):
-    """Quantidade de registros por nível de risco e região."""
-    tab = pd.crosstab(df["regiao"], df["nivel_risco"]).reindex(columns=ORDEM_RISCO, fill_value=0)
-    tab = tab.loc[tab.sum(axis=1) > 0]
-    fig, ax = _figura(9, 3.8)
-    base = np.zeros(len(tab))
-    for nivel in ORDEM_RISCO:
-        ax.barh(tab.index.astype(str), tab[nivel], left=base, color=CORES_RISCO[nivel],
-                edgecolor="white", linewidth=2, label=nivel)
-        base += tab[nivel].values
-    ax.invert_yaxis()
-    ax.set_title("Registros por nível de risco em cada região")
-    ax.set_xlabel("Quantidade de registros (estado x trimestre)")
-    ax.legend(title="Risco", frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
-    ax.grid(axis="y", visible=False)
-    fig.tight_layout()
-    return fig
-
-
-def grafico_renda_regiao(df):
-    tab = df.groupby(["ano", "regiao"], observed=True)["renda_media"].mean().reset_index()
-    fig, ax = _figura()
-    sns.lineplot(data=tab, x="ano", y="renda_media", hue="regiao", palette=CORES_REGIAO,
-                 hue_order=[r for r in ORDEM_REGIOES if r in set(tab["regiao"])],
-                 marker="o", lw=2, ax=ax)
-    ax.set_title("Renda média mensal por região")
-    ax.set_xlabel("Ano")
-    ax.set_ylabel("Renda média")
-    ax.set_xticks(sorted(tab["ano"].unique()))
-    eixo_moeda(ax, "y")
-    ax.legend(title="Região", frameon=False, bbox_to_anchor=(1.01, 1), loc="upper left")
+    sns.despine(fig=fig, left=True, bottom=True)
     fig.tight_layout()
     return fig
 
@@ -586,82 +673,18 @@ def grafico_desigualdade(df):
     """Diferença (p.p.) entre a região com maior e a com menor taxa, por ano."""
     tab = df.groupby(["ano", "regiao"], observed=True)["taxa_desemprego"].mean().unstack()
     gap = tab.max(axis=1) - tab.min(axis=1)
-    fig, ax = _figura(10, 3.4)
-    ax.bar(gap.index, gap.values, color=AZUL, edgecolor="white", linewidth=2, width=0.6)
-    for x, v in zip(gap.index, gap.values):
-        ax.text(x, v + 0.1, fmt_num(v, 1), ha="center", fontsize=9, color=TINTA_SECUNDARIA)
-    ax.set_title("Desigualdade regional: diferença entre a maior e a menor taxa regional")
-    ax.set_xlabel("Ano")
-    ax.set_ylabel("Pontos percentuais")
+    fig, ax = plt.subplots(figsize=(12, 3.6))
+    barras = ax.bar(gap.index, gap.values, color=v.AZUL, width=0.62, zorder=3)
+    destaque = gap.idxmax()
+    barras[list(gap.index).index(destaque)].set_color(v.LARANJA)
+    for x, valor in zip(gap.index, gap.values):
+        ax.text(x, valor + 0.12, fmt_num(valor, 1), ha="center", fontsize=10.5, color=v.TEXTO, fontweight="bold")
+    ax.set_title("Desigualdade regional: maior menos menor taxa regional (p.p.)", loc="left")
     ax.set_xticks(gap.index)
+    ax.set_ylim(0, gap.max() * 1.22)
     ax.grid(axis="x", visible=False)
+    sns.despine(fig=fig, left=True, bottom=True)
     fig.tight_layout()
-    return fig
-
-
-# ---------------------------------------------------------------------------
-# Gráficos interativos Plotly
-# ---------------------------------------------------------------------------
-
-LAYOUT_PLOTLY = dict(
-    font=dict(family="system-ui, -apple-system, Segoe UI, sans-serif", color=TINTA),
-    plot_bgcolor="#fcfcfb",
-    paper_bgcolor="rgba(0,0,0,0)",
-    margin=dict(l=10, r=10, t=50, b=10),
-    hoverlabel=dict(bgcolor="white"),
-)
-
-
-def mapa_uf(df):
-    """Mapa coroplético interativo da taxa média por UF (malha do IBGE)."""
-    tab = (
-        df.groupby(["uf", "estado", "codigo_ibge", "regiao"], observed=True)
-        .agg(taxa=("taxa_desemprego", "mean"), renda=("renda_media", "mean"),
-             desempregados=("desempregados", "mean"))
-        .reset_index()
-    )
-    tab["codigo_ibge"] = tab["codigo_ibge"].astype(str)
-    fig = px.choropleth(
-        tab, geojson=carregar_geojson(), locations="codigo_ibge",
-        featureidkey="properties.codarea", color="taxa",
-        color_continuous_scale=ESCALA_PLOTLY,
-        hover_name="estado",
-        hover_data={"codigo_ibge": False, "uf": True, "regiao": True,
-                    "taxa": ":.2f", "renda": ":,.2f", "desempregados": ":,.0f"},
-        labels={"taxa": "Taxa média (%)", "renda": "Renda média (R$)", "uf": "UF",
-                "regiao": "Região", "desempregados": "Desempregados (média)"},
-    )
-    fig.update_geos(fitbounds="locations", visible=False)
-    fig.update_traces(marker_line_color="white", marker_line_width=1)
-    fig.update_layout(**LAYOUT_PLOTLY, height=520,
-                      title="Taxa média de desemprego por estado (estados sem dados ficam em branco)")
-    return fig
-
-
-def linha_interativa_uf(df, ufs):
-    tab = df[df["uf"].isin(ufs)].groupby(["data", "periodo", "uf"])["taxa_desemprego"].mean().reset_index()
-    fig = px.line(tab, x="data", y="taxa_desemprego", color="uf", markers=True,
-                  hover_data={"periodo": True, "data": False},
-                  labels={"data": "Trimestre", "taxa_desemprego": "Taxa (%)", "uf": "UF", "periodo": "Período"},
-                  color_discrete_sequence=list(CORES_REGIAO.values()))
-    fig.update_traces(line_width=2)
-    fig.update_layout(**LAYOUT_PLOTLY, height=420, title="Comparação trimestral entre estados",
-                      hovermode="x unified", yaxis_ticksuffix="%")
-    return fig
-
-
-def dispersao_interativa(df, eixo_x):
-    rotulos = {"renda_media": "Renda média (R$)", "inflacao": "Inflação (%)",
-               "vagas_formais": "Vagas formais", "taxa_desemprego": "Taxa de desemprego (%)",
-               "regiao": "Região"}
-    fig = px.scatter(
-        df, x=eixo_x, y="taxa_desemprego", color="regiao", color_discrete_map=CORES_REGIAO,
-        category_orders={"regiao": ORDEM_REGIOES}, hover_name="estado",
-        hover_data={"periodo": True, "setor_predominante": True, "nivel_risco": True},
-        labels=rotulos, opacity=0.8,
-    )
-    fig.update_traces(marker=dict(size=9, line=dict(color="white", width=1)))
-    fig.update_layout(**LAYOUT_PLOTLY, height=460, title=f"{rotulos[eixo_x]} x taxa de desemprego")
     return fig
 
 

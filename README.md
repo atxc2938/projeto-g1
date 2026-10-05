@@ -1,8 +1,12 @@
 # Evolução do Desemprego no Brasil (2015 a 2024)
 
-Projeto da **Avaliação G1** da disciplina **Linguagem de Programação: Análise e Visualização de Dados com Python**.
-**Tema 04: Evolução do Desemprego no Brasil.**
-**Autor:** Marcell Sidaco de Moraes
+Projeto da **Avaliação G1** · **Tema 04: Evolução do Desemprego no Brasil**
+
+| | |
+|---|---|
+| **Disciplina** | Linguagens de Programação |
+| **Professor** | Alexandre Neves Louzada |
+| **Aluno** | Marcell Sidaco de Moraes |
 
 | Entrega | Link |
 |---|---|
@@ -10,7 +14,7 @@ Projeto da **Avaliação G1** da disciplina **Linguagem de Programação: Análi
 | Página do projeto (GitHub Pages) | https://atxc2938.github.io/projeto-g1/ |
 | Dashboard (Streamlit Community Cloud) | https://projeto-g1-desemprego.streamlit.app |
 | Notebook de análise | [`notebooks/analise_desemprego.ipynb`](notebooks/analise_desemprego.ipynb) |
-| Código do dashboard | [`app.py`](app.py), [`utils.py`](utils.py), [`pages/`](pages) |
+| Código do dashboard | [`app.py`](app.py), [`utils.py`](utils.py), [`visual.py`](visual.py), [`paginas/`](paginas) |
 | Base de dados | [`dados/simulacao_desemprego_brasil.csv`](dados/simulacao_desemprego_brasil.csv) |
 
 ---
@@ -30,7 +34,7 @@ dados/simulacao_desemprego_brasil_tratado.csv  (dados tratados)
     ↓ persistência com modelo relacional (SQLAlchemy ORM)
 database/desemprego.sqlite                     (banco SQLite)
     ↓ consulta SQL com JOIN (SQLAlchemy + pandas)
-app.py + pages/                                (dashboard Streamlit multipágina)
+app.py + paginas/                                (dashboard Streamlit multipágina)
     ↓ deploy
 Streamlit Community Cloud + GitHub Pages       (publicação online)
 ```
@@ -91,7 +95,8 @@ projeto-g1/
 │
 ├── app.py                 # entrada do dashboard: filtros, navegação e página inicial
 ├── utils.py               # carga do banco, filtros, KPIs, gráficos e textos
-├── pages/                 # páginas do dashboard multipágina
+├── visual.py              # tema escuro, CSS, animações, template Plotly e componentes
+├── paginas/                 # páginas do dashboard multipágina
 │   ├── 1_Visao_Geral.py
 │   ├── 2_Evolucao_Temporal.py
 │   ├── 3_Regioes_e_Estados.py
@@ -127,6 +132,7 @@ regiao (1) ──< (N) uf (1) ──< (N) indicador_trimestral (N) >── (1) s
 | Estado com maior desemprego | Ceará (13,65%) | Ranking estadual |
 | Região mais afetada | Nordeste (13,28%) | Comparação regional |
 | Total de desempregados | 253,84 milhões | Soma total dos registros (5,37 milhões no último trimestre, 2024-T4) |
+| Mediana nacional (curiosidade) | 9,82% | Valor do meio das taxas; fica um pouco abaixo da média |
 | Renda média nacional | R$ 2.790,65 | Média salarial |
 | Evolução da taxa | 10,36% para 8,48% (-1,88 p.p.) | Tendência temporal (2015-T1 a 2024-T4) |
 
@@ -149,6 +155,20 @@ coroplético interativo, comparação interativa entre estados e tabela dinâmic
 
 Cada gráfico tem interpretação textual calculada com os dados filtrados, e a última página traz as respostas
 às perguntas orientadoras e a conclusão executiva.
+
+### Visual e interatividade
+
+* **Tema escuro sóbrio**: tipografia Lexend e Source Sans 3, um único azul de destaque e paleta de regiões
+  validada para daltonismo; números no formato brasileiro.
+* **Organização em abas**: cada página mostra um assunto por vez, com uma interpretação curta abaixo do gráfico.
+* **KPIs com contagem suave** até o valor a cada filtro. Além dos 6 KPIs do Tema, a **mediana nacional**
+  aparece como curiosidade.
+* **Animação por ano** (botão Reproduzir): mapa, corrida do ranking de estados, barras por região e
+  dispersão renda x desemprego.
+* **Mapa clicável**: ao clicar em um estado, abre um painel com os indicadores e a série histórica dele.
+* **Gráficos interativos** (Plotly) com zoom, legenda clicável e tooltips; gráficos estatísticos
+  (heatmaps, correlação, boxplot) em **Seaborn/Matplotlib** no mesmo estilo.
+* **Responsivo** para telas de 1280 a 2560 px de largura; animações respeitam a opção de reduzir movimento.
 
 ### Funcionalidades atendidas
 
@@ -199,3 +219,4 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/analise_desemprego
 ## 10. Autor
 
 **Marcell Sidaco de Moraes** · marcell.moraes@soulasalle.com.br
+Disciplina Linguagens de Programação · Professor Alexandre Neves Louzada
