@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Desemprego no Brasil | Projeto G1</title>
+  <meta name="description" content="Análise e dashboard interativo da evolução do desemprego no Brasil entre 2015 e 2024, com Python, Pandas, Matplotlib, Seaborn, SQLAlchemy e Streamlit.">
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --ink: #0b0b0b;
+      --ink-2: #52514e;
+      --muted: #898781;
+      --line: #e1e0d9;
+      --blue: #2a78d6;
+      --blue-dark: #184f95;
+      --blue-soft: #e8f1fc;
+      --orange: #eb6834;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.6;
+    }
+    a { color: var(--blue-dark); }
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+    header.hero {
+      background: linear-gradient(135deg, #0d366b 0%, #1c5cab 55%, #2a78d6 100%);
+      color: #fff;
+      padding: 64px 0 56px;
+    }
+    .hero .tag {
+      display: inline-block; font-size: 0.85rem; letter-spacing: 0.04em;
+      background: rgba(255,255,255,0.14); padding: 4px 12px; border-radius: 999px;
+    }
+    .hero h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.15; margin: 16px 0 8px; }
+    .hero p.sub { font-size: 1.15rem; max-width: 720px; opacity: 0.92; margin: 0 0 24px; }
+    .hero .autor { font-size: 0.95rem; opacity: 0.85; margin-bottom: 24px; }
+    .botoes { display: flex; flex-wrap: wrap; gap: 12px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 600;
+      padding: 12px 20px; border-radius: 10px; transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,0.18); }
+    .btn.primario { background: #fff; color: var(--blue-dark); }
+    .btn.secundario { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.4); }
+
+    nav.menu {
+      position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(6px); border-bottom: 1px solid var(--line);
+    }
+    nav.menu ul { list-style: none; display: flex; gap: 20px; margin: 0; padding: 12px 0; overflow-x: auto; }
+    nav.menu a { text-decoration: none; color: var(--ink-2); font-size: 0.92rem; white-space: nowrap; }
+    nav.menu a:hover { color: var(--blue); }
+
+    section { padding: 48px 0 8px; }
+    h2 { font-size: 1.6rem; margin: 0 0 16px; }
+    h2 small { display: block; font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 24px;
+    }
+    .grid { display: grid; gap: 16px; }
+    .grid.kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+    .grid.duas { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+    .grid.galeria { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+
+    .kpi .rotulo { color: var(--ink-2); font-size: 0.9rem; }
+    .kpi .valor { font-size: 1.6rem; white-space: nowrap; font-weight: 700; margin: 4px 0; }
+    .kpi .nota { color: var(--muted); font-size: 0.85rem; }
+    .kpi .queda { color: #006300; font-weight: 600; }
+
+    ol.perguntas { margin: 0; padding-left: 22px; }
+    ol.perguntas li { margin: 6px 0; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { background: var(--blue-soft); color: var(--blue-dark); padding: 6px 14px; border-radius: 999px; font-size: 0.92rem; font-weight: 500; }
+    .chip.extra { background: #f0efec; color: var(--ink-2); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--ink-2); font-weight: 600; }
+
+    figure { margin: 0; }
+    figure img { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid var(--line); background: #fff; }
+    figcaption { font-size: 0.9rem; color: var(--ink-2); margin-top: 8px; }
+
+    .destaque { border-left: 4px solid var(--blue); }
+    .arquivos li { margin: 8px 0; }
+    .arquivos code { background: #f0efec; padding: 2px 6px; border-radius: 6px; font-size: 0.88rem; }
+
+    .dashboard-cta {
+      display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: center;
+    }
+    .dashboard-cta .btn.primario { background: var(--blue); color: #fff; }
+
+    footer { margin-top: 56px; padding: 32px 0; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 0.9rem; background: var(--surface); }
+
+    @media (max-width: 720px) {
+      header.hero { padding: 44px 0 40px; }
+      .dashboard-cta { grid-template-columns: 1fr; }
+      .card { padding: 18px; }
+      th, td { padding: 8px 6px; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="container">
+    <span class="tag">Avaliação G1 · Tema 04</span>
+    <h1>Evolução do Desemprego no Brasil</h1>
+    <p class="sub">Dashboard analítico do desemprego entre 2015 e 2024, construído com Python, Pandas, Matplotlib, Seaborn, SQLAlchemy, SQLite e Streamlit.</p>
+    <div class="autor">Marcell Sidaco de Moraes · Linguagem de Programação: Análise e Visualização de Dados com Python</div>
+    <div class="botoes">
+      <a class="btn primario" href="{{STREAMLIT_URL}}" target="_blank" rel="noopener">Abrir dashboard</a>
+      <a class="btn secundario" href="https://github.com/{{GITHUB_USER}}/projeto-g1" target="_blank" rel="noopener">Ver repositório</a>
+      <a class="btn secundario" href="https://github.com/{{GITHUB_USER}}/projeto-g1/blob/main/notebooks/analise_desemprego.ipynb" target="_blank" rel="noopener">Notebook</a>
+    </div>
+  </div>
+</header>
+
+<nav class="menu">
+  <div class="container">
+    <ul>
+      <li><a href="#sobre">Sobre</a></li>
+      <li><a href="#perguntas">Perguntas</a></li>
+      <li><a href="#metricas">Métricas</a></li>
+      <li><a href="#tecnologias">Tecnologias</a></li>
+      <li><a href="#graficos">Gráficos</a></li>
+      <li><a href="#arquivos">Arquivos</a></li>
+      <li><a href="#dashboard">Dashboard</a></li>
+      <li><a href="#conclusoes">Conclusões</a></li>
+      <li><a href="#proposito">Propósito</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="container">
+
+  <section id="sobre">
+    <h2><small>01</small>Sobre o projeto</h2>
+    <div class="card">
+      <p>O desemprego é um dos principais indicadores socioeconômicos de um país: afeta a qualidade de vida, a renda das famílias, o consumo, o desenvolvimento regional e o crescimento econômico.</p>
+      <p>Este projeto analisa uma base simulada com <strong>800 registros (20 estados x 40 trimestres)</strong> para identificar tendências, regiões mais afetadas, estados críticos, períodos de crise e de recuperação econômica.</p>
+      <p style="margin-bottom:0">O fluxo completo vai da leitura do CSV bruto até a publicação online: limpeza e engenharia de atributos no notebook, persistência em um banco <strong>SQLite</strong> com modelo relacional em <strong>SQLAlchemy</strong>, dashboard multipágina em <strong>Streamlit</strong> e esta página no <strong>GitHub Pages</strong>.</p>
+    </div>
+  </section>
+
+  <section id="perguntas">
+    <h2><small>02</small>Perguntas orientadoras</h2>
+    <div class="card">
+      <ol class="perguntas">
+        <li>Quais regiões apresentam maior desemprego?</li>
+        <li>Quais estados apresentam menores taxas?</li>
+        <li>Existem períodos de crise econômica mais evidentes?</li>
+        <li>O desemprego aumentou ou diminuiu ao longo do tempo?</li>
+        <li>Existem diferenças relevantes entre regiões?</li>
+        <li>Há sazonalidade em determinados setores?</li>
+        <li>Quais grupos parecem mais vulneráveis?</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="metricas">
+    <h2><small>03</small>Métricas analisadas</h2>
+    <div class="grid kpis">
+      <div class="card kpi">
+        <div class="rotulo">Taxa média de desemprego</div>
+        <div class="valor">9,90%</div>
+        <div class="nota">Média geral de 2015 a 2024</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Estado com maior desemprego</div>
+        <div class="valor">Ceará</div>
+        <div class="nota">13,65% de taxa média</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Região mais afetada</div>
+        <div class="valor">Nordeste</div>
+        <div class="nota">13,28% contra 6,79% no Sul</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Total de desempregados</div>
+        <div class="valor">5,37 mi</div>
+        <div class="nota">Soma dos 20 estados no 4º trimestre de 2024</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Renda média nacional</div>
+        <div class="valor">R$ 2.790,65</div>
+        <div class="nota">Média salarial mensal</div>
+      </div>
+      <div class="card kpi">
+        <div class="rotulo">Evolução da taxa</div>
+        <div class="valor">10,36% → 8,48%</div>
+        <div class="nota"><span class="queda">-1,88 p.p.</span> entre 2015-T1 e 2024-T4</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tecnologias">
+    <h2><small>04</small>Tecnologias</h2>
+    <div class="card">
+      <div class="chips">
+        <span class="chip">Python</span>
+        <span class="chip">Pandas</span>
+        <span class="chip">Matplotlib</span>
+        <span class="chip">Seaborn</span>
+        <span class="chip">Streamlit</span>
+        <span class="chip">GitHub</span>
+        <span class="chip extra">NumPy</span>
+        <span class="chip extra">Plotly</span>
+        <span class="chip extra">SQLAlchemy</span>
+        <span class="chip extra">SQLite</span>
+        <span class="chip extra">Requests (API do IBGE)</span>
+        <span class="chip extra">GitHub Pages</span>
+        <span class="chip extra">Streamlit Community Cloud</span>
+      </div>
+      <table style="margin-top:20px">
+        <thead><tr><th>Funcionalidade avançada</th><th>Como foi feita</th></tr></thead>
+        <tbody>
+          <tr><td>Persistência em banco</td><td>SQLite gerado pelo notebook com o ORM do SQLAlchemy</td></tr>
+          <tr><td>Modelagem relacional</td><td>Tabelas <code>regiao</code>, <code>uf</code>, <code>setor</code> e <code>indicador_trimestral</code> com chaves estrangeiras; o app lê com JOIN</td></tr>
+          <tr><td>Dashboard multipágina</td><td>Seis páginas com <code>st.navigation</code> e filtros compartilhados</td></tr>
+          <tr><td>Mapa interativo</td><td>Mapa coroplético Plotly com a malha oficial do IBGE</td></tr>
+          <tr><td>Séries temporais e correlação</td><td>Média móvel, variação anual, tendência linear e correlação de Pearson</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="graficos">
+    <h2><small>05</small>Principais gráficos</h2>
+    <div class="grid galeria">
+      <figure class="card">
+        <img src="imagens/linha_temporal.png" alt="Linha temporal da taxa média de desemprego com picos em 2016 e 2020 a 2021">
+        <figcaption>Evolução trimestral com média móvel: picos na recessão de 2016 e na pandemia.</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="imagens/linha_regioes.png" alt="Taxa média anual por região">
+        <figcaption>As cinco regiões oscilam juntas, mas a ordem entre elas nunca muda.</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="imagens/barras_estado.png" alt="Ranking da taxa média por estado">
+        <figcaption>Ranking estadual: os cinco estados do Nordeste lideram; os três do Sul têm as menores taxas.</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="imagens/heatmap_trimestral.png" alt="Heatmap da taxa média por ano e trimestre">
+        <figcaption>Heatmap trimestral: o pior momento foi o 3º trimestre de 2020 (11,85%).</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="imagens/desigualdade_regional.png" alt="Taxa por região e ano e diferença entre regiões">
+        <figcaption>Desigualdade regional entre 5,4 e 7,3 p.p. em todos os anos.</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="imagens/dispersao_renda.png" alt="Dispersão entre renda média e taxa de desemprego">
+        <figcaption>Renda x desemprego: correlação praticamente nula (r = 0,02).</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="imagens/ranking_criticos.png" alt="Estados com mais trimestres em risco crítico">
+        <figcaption>Bahia, Ceará e Paraíba concentram os trimestres em risco Crítico.</figcaption>
+      </figure>
+      <figure class="card">
+        <img src="imagens/sazonalidade_setor.png" alt="Sazonalidade por setor e trimestre">
+        <figcaption>Sazonalidade fraca; a Indústria oscila mais, com pico no 3º trimestre.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="arquivos">
+    <h2><small>06</small>Arquivos do projeto</h2>
+    <div class="card">
+      <ul class="arquivos">
+        <li><a href="https://github.com/{{GITHUB_USER}}/projeto-g1#readme" target="_blank" rel="noopener">README</a>: documentação, estrutura e como executar.</li>
+        <li><a href="https://github.com/{{GITHUB_USER}}/projeto-g1/blob/main/notebooks/analise_desemprego.ipynb" target="_blank" rel="noopener">Notebook de análise</a> <code>notebooks/analise_desemprego.ipynb</code>: leitura, limpeza, atributos, KPIs, gráficos e interpretação.</li>
+        <li><a href="https://github.com/{{GITHUB_USER}}/projeto-g1/blob/main/app.py" target="_blank" rel="noopener">Código do dashboard</a> <code>app.py</code>, <code>utils.py</code> e <code>pages/</code>.</li>
+        <li><a href="dados/simulacao_desemprego_brasil.csv" download>Base original (CSV)</a> e <a href="dados/simulacao_desemprego_brasil_tratado.csv" download>base tratada (CSV)</a>.</li>
+        <li><a href="database/desemprego.sqlite" download>Banco SQLite</a> <code>database/desemprego.sqlite</code>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="dashboard">
+    <h2><small>07</small>Dashboard interativo</h2>
+    <div class="card dashboard-cta">
+      <div>
+        <p>O dashboard no Streamlit Community Cloud tem seis páginas (início, visão geral, evolução temporal, regiões e estados, análise econômica, dados e conclusão) e filtros por <strong>ano, trimestre, região, estado, setor econômico e nível de risco</strong>.</p>
+        <p>Os KPIs, gráficos e textos de interpretação são recalculados a cada filtro. Há mapa interativo, tabela dinâmica configurável e download dos dados filtrados.</p>
+        <a class="btn primario" href="{{STREAMLIT_URL}}" target="_blank" rel="noopener">Acessar o dashboard</a>
+      </div>
+      <figure>
+        <img src="imagens/dashboard_mapa.png" alt="Página Regiões e estados do dashboard com mapa do Brasil">
+      </figure>
+    </div>
+  </section>
+
+  <section id="conclusoes">
+    <h2><small>08</small>Principais conclusões</h2>
+    <div class="grid duas">
+      <div class="card destaque">
+        <strong>Tendência de queda com duas crises.</strong>
+        <p style="margin-bottom:0">A taxa caiu de 10,36% para 8,48%. Os picos de 2016 (recessão) e de 2020 e 2021 (pandemia) foram seguidos de recuperação, e 2024 teve a menor média anual da série.</p>
+      </div>
+      <div class="card destaque">
+        <strong>Desigualdade regional estrutural.</strong>
+        <p style="margin-bottom:0">O Nordeste tem taxa cerca de duas vezes maior que a do Sul, e a ordem entre as regiões é a mesma nos dez anos analisados.</p>
+      </div>
+      <div class="card destaque">
+        <strong>Estados críticos concentrados.</strong>
+        <p style="margin-bottom:0">Bahia, Ceará e Paraíba lideram em trimestres de risco Crítico; Paraná, Santa Catarina e Rio Grande do Sul têm as menores taxas.</p>
+      </div>
+      <div class="card destaque">
+        <strong>Variáveis econômicas explicam pouco.</strong>
+        <p style="margin-bottom:0">Renda, inflação, vagas formais e setor têm correlação próxima de zero com o desemprego nesta base. A recomendação é focar políticas de emprego no Nordeste e no Norte.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="proposito">
+    <h2><small>09</small>Propósito pedagógico</h2>
+    <div class="card">
+      <p style="margin:0">Projeto desenvolvido para a Avaliação G1 da disciplina Linguagem de Programação: Análise e Visualização de Dados com Python. O objetivo é praticar um ciclo completo de análise de dados (tratamento, exploração, KPIs, visualização, banco de dados, dashboard e publicação) com foco em interpretar o cenário econômico e apoiar a tomada de decisão, mais do que apenas gerar gráficos. A base é simulada e foi disponibilizada no repositório <a href="https://github.com/AlexandreLouzada/Dados-Simulados-G2" target="_blank" rel="noopener">Dados-Simulados-G2</a>.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    Marcell Sidaco de Moraes · Avaliação G1 · Tema 04: Evolução do Desemprego no Brasil ·
+    <a href="https://github.com/{{GITHUB_USER}}/projeto-g1" target="_blank" rel="noopener">Repositório</a> ·
+    <a href="{{STREAMLIT_URL}}" target="_blank" rel="noopener">Dashboard</a>
+  </div>
+</footer>
+
+</body>
+</html>
